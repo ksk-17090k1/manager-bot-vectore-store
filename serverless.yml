@@ -1,0 +1,93 @@
+frameworkVersion: '3'
+
+useDotenv: true
+
+# この名前は自由です
+service: myboss-bot-lambda-vectore-store
+provider:
+  name: aws
+  # 利用可能なバージョンは https://docs.aws.amazon.com/lambda/latest/dg/lambda-python.html を確認してください
+  runtime: python3.11
+  # リージョンは普段使うものに変更
+  region: ap-northeast-1
+  # the default value is 6 sec!!
+  timeout: 900
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            # s3の操作用
+            - "s3:ListBucket"
+            - "s3:GetObject"
+            - "s3:PutObject"
+            - "s3:DeleteObject"
+          Resource: "*"
+        # 他にも必要なものがあれば追記してください
+  environment:
+    SERVERLESS_STAGE: ${opt:stage, 'prod'}
+    # デプロイを実行する前に export しておいてください
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+    SETTINGS_FILE_PATH: ${env:SETTINGS_FILE_PATH}
+    TOKEN_GET_MESSAGES_APP: ${env:TOKEN_GET_MESSAGES_APP}
+    SLACK_URL_HISTORY: ${env:SLACK_URL_HISTORY}
+    SLACK_URL_REPLIES: ${env:SLACK_URL_REPLIES}
+
+# エンドポイント一覧を設定
+# OAuth フローを設定する場合は他に二つ追加します
+functions:
+  app:
+    handler: app3.handler
+    events:
+      # 毎日午前1時に実行 (東京時間)
+      - schedule: cron(0 16 * * ? *)
+    #   # 毎日午前12時に実行 (東京時間)
+    #   # - schedule: cron(0 3 * * ? *)
+    layers:
+      # pluginのlambda layer
+      # - Ref: PythonRequirementsLambdaLayer
+      # 自作モジュールのlambda layer
+      # NOTE: [TitleCaseのlayer名] + "LambdaLayer" となるようにしないとエラー
+      - Ref: MbbotModuleLambdaLayer
+
+# setting of Layer
+layers:
+  # NOTE: ここTitleCaseにしたほうがいい。
+  MbbotModule:
+    path: layers
+    description: layer for myboss bot
+    compatibleRuntimes:
+      - python3.11
+
+
+# アップロードに含めたくないファイルは ! はじまりで列挙します
+package:
+  patterns:
+    - "!.venv/**"
+    - "!node_modules/**"
+    - "!.idea/**"
+    - "!env_python311/**"
+    - "!.env"
+    - "!sandbox.py"
+    - "!deploy.bat"
+
+# プラグインを使って依存ライブラリを zip 圧縮します
+custom:
+  # 公式: https://github.com/serverless/serverless-python-requirements/blob/master/README.md
+  pythonRequirements:
+    # NOTE: windows環境でZIP化すると、デプロイ先がLinuxだとエラーが起こる可能性あり。
+    # zip: true
+    slim: true
+    # https://github.com/serverless/serverless-python-requirements/issues/698
+    dockerizePip: true
+    # SAM Image Repositories: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-image-repositories.html
+    dockerImage: public.ecr.aws/sam/build-python3.11:latest-x86_64
+    # Lambda Image Repositories: https://gallery.ecr.aws/lambda/python
+    # dockerImage: public.ecr.aws/lambda/python:3.11-x86_64
+    # pipでインストールするパッケージをLambdaでレイヤーとして扱うためのオプション設定
+    # layer: true
+    # useDownloadCache: false
+    # useStaticCache: false
+
+plugins:
+  - serverless-python-requirements

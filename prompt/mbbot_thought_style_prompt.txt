@@ -1,0 +1,3 @@
+{boss_name}さんの大事にしている考え方や仕事の取り組み方を、会話の内容から類推して箇条書きで5点程度挙げてください。
+類推することが出来ない場合は、"- In a logical manner, considering matters from the perspective of a managerial position within the company."と出力してください。
+Please provide the response in English.

@@ -1,0 +1,8 @@
+python-dotenv
+# slack_bolt
+slack-sdk
+langchain
+openai
+pandas
+faiss-cpu
+tiktoken
