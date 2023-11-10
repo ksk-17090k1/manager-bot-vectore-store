@@ -1,60 +1,41 @@
 import importlib
 import json
 import os
+import re
 from os.path import dirname, join
 from pathlib import Path
+
 import numpy as np
-
 import pandas as pd
-import requests
 from dotenv import load_dotenv
-import re
-
 
 import src.botdev.get_slack_talks as get_slack_talks
-importlib.reload(get_slack_talks)
-
-from logging import config, getLogger
-from configparser import ConfigParser
-
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-# from langchain.chains import VectorDBQA
-from langchain.chains import RetrievalQA
-from langchain.llms import OpenAI
-from langchain.document_loaders import TextLoader
-from langchain.indexes import VectorstoreIndexCreator
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.docstore.document import Document
-from langchain.vectorstores import FAISS
-from langchain.chains.question_answering import load_qa_chain
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain
-from langchain.chains.conversational_retrieval.prompts import CONDENSE_QUESTION_PROMPT
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-import sys
-from logging import (
-    getLogger, Formatter, StreamHandler, FileHandler,
-    DEBUG, INFO,
-)
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage
-)
-from langchain.prompts.chat import (
-    ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-)
-
 import src.botdev.log_setting_utils as log_setting_utils
-import importlib
+
+importlib.reload(get_slack_talks)
 importlib.reload(log_setting_utils)
 
+import sys
+from logging import (DEBUG, INFO, FileHandler, Formatter, StreamHandler,
+                     getLogger)
+
+from langchain.chains import (ConversationalRetrievalChain, LLMChain,
+                              RetrievalQA)
+from langchain.chains.conversational_retrieval.prompts import \
+    CONDENSE_QUESTION_PROMPT
+from langchain.chains.question_answering import load_qa_chain
+from langchain.chat_models import ChatOpenAI
+from langchain.docstore.document import Document
+from langchain.document_loaders import TextLoader
+from langchain.embeddings import CacheBackedEmbeddings, OpenAIEmbeddings
+from langchain.llms import OpenAI
+from langchain.prompts import PromptTemplate
+from langchain.prompts.chat import (ChatPromptTemplate,
+                                    HumanMessagePromptTemplate,
+                                    SystemMessagePromptTemplate)
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import FAISS, Chroma
 
 # ログ設定
 logger = log_setting_utils.conf_logger(DEBUG)
@@ -64,7 +45,15 @@ load_dotenv(join(dirname(__file__), '.env'))
 
 
 
-def create_slack_talk_prompt(df):
+def create_slack_talk_prompt(df: pd.DataFrame):
+    """ function for creating prompt from slack chat history
+
+    Args:
+        df (pd.DataFrame): slack chat history
+
+    Returns:
+        str: prompt
+    """
 
     logger.debug("run!")
 
@@ -103,7 +92,19 @@ def create_slack_talk_prompt(df):
     return prompt.strip()
 
 
-def create_docs_from_txt(path, metadata=None):
+def create_docs_from_txt(path: str, metadata=None):
+    """ function for creating Document object from txt file.
+        if metadata is None, return str.
+
+    Args:
+        path (str): path of txt file
+        metadata (dict): metadata for Document object
+
+    Returns:
+        docs (list): list of Document object.
+        if metadata is None, return str.
+    """
+
 
     logger.debug("run!")
 
@@ -129,6 +130,16 @@ def create_docs_from_txt(path, metadata=None):
 
 
 def split_docs(docs, splitter_settings, metadatas=None):
+    """ function for splitting Document object or str.
+
+    Args:
+        docs (): list of Document object or str.
+        splitter_settings (): settings for splitter.
+        metadatas (): list of metadata for Document object.
+
+    Returns:
+        splitted_docs (): list of splitted Document object or str.
+    """
 
     logger.debug("run!")
 
@@ -160,12 +171,34 @@ def split_docs(docs, splitter_settings, metadatas=None):
 
 
 class BaseRAGChatBot:
+    """ Base class for RAG chatbot.
+    """
 
-    def create_emb_db(self, db_type, docs, model):
+    def create_emb_db(self, db_type, docs, model, cache_fs=None):
+        """ function for creating vector store.
+
+        Args:
+            db_type (str): type of vector store.
+            docs (): list of Document object or str.
+            model (str): name of model.
+            cache_fs (): cache file system.
+
+        Returns:
+            db (): vector store.
+        """
 
         logger.debug("run!")
 
         embeddings = OpenAIEmbeddings(model=model)
+
+        # キャッシュを使う場合
+        if cache_fs is not None:
+            embeddings = CacheBackedEmbeddings.from_bytes_store(
+                embeddings, cache_fs, namespace=embeddings.model
+            )
+            # キャッシュで使ったデータを表示
+            logger.debug(f"cache_fs.yield_keys(): {list(cache_fs.yield_keys())}")
+
 
         docs_type = type(docs)
         if db_type == "FAISS":
@@ -186,17 +219,25 @@ class BaseRAGChatBot:
         return db
 
 
-    def add_texts_to_db(self, db, text):
+    def add_texts_to_db(self, db, text: str):
+        """ function for adding text to vector store.
+
+        Args:
+            db (): vector store.
+            text (str): text to add to vector store.
+
+        Returns:
+            None
+        """
         logger.debug("run!")
         db.add_texts([text])
 
 
-    def get_qa_from_db(self, db, chain_type, custom_prompt=None, model="gpt-3.5-turbo"):
+    def get_qa_from_db(self, db, chain_type, custom_prompt=None, model="gpt-3.5-turbo", temperature=0):
 
         logger.debug("run!")
 
-        # TODO: temperture可変にする
-        llm = ChatOpenAI(model_name=model, temperature=0)
+        llm = ChatOpenAI(model_name=model, temperature=temperature)
 
         # retriever作成
         retriever = db.as_retriever()
@@ -228,6 +269,16 @@ class BaseRAGChatBot:
 
 
     def get_result_from_qa(self, qa, query):
+        """ function for getting result from qa.
+
+        Args:
+            qa (): qa.
+            query (str): query.
+
+        Returns:
+            result (): result.
+            source_documents (): source documents.
+        """
 
         logger.debug("run!")
 
@@ -238,11 +289,20 @@ class BaseRAGChatBot:
         # ソースのドキュメントの参照は内部的にsimilarity_searchを使っている
         # searched_docs = db.similarity_search(query)
 
-
         return result["result"], result["source_documents"]
 
 
     def get_qa_from_db_and_convs(self, db, option, prompt_template=None, model="gpt-3.5-turbo"):
+        """ function for getting qa from db and conversation.
+        Args:
+            db (): vector store.
+            option (str): option for qa.
+            prompt_template (): prompt template.
+            model (str): name of model.
+
+        Returns:
+            qa (): qa.
+        """
 
         logger.debug("run!")
 
@@ -280,7 +340,7 @@ class BaseRAGChatBot:
         return qa
 
 
-    # チャット履歴を保存するためのクラス。slackの関数を挟むとリストでは保持できないことがわかったので。
+    # チャット履歴を保存するためのクラス。
     class ChatHistoryMemory():
 
         def __init__(self) -> None:
@@ -295,11 +355,11 @@ class BaseRAGChatBot:
         logger.debug("run!")
 
         chat_history = chat_history_memory.chat_history
+        result = qa({"question": query, "chat_history": chat_history})
 
         # search distance に閾値を設定してフィルタがかけられる
-        vectordbkwargs = {"search_distance": 0.8}
-
-        result = qa({"question": query, "chat_history": chat_history, "vectordbkwargs": vectordbkwargs})
+        # vectordbkwargs = {"search_distance": 0.8}
+        # result = qa({"question": query, "chat_history": chat_history, "vectordbkwargs": vectordbkwargs})
 
         # chat_historyの更新(末尾に詰めていく)
         chat_history = chat_history + [(query, result["answer"])]
@@ -312,11 +372,12 @@ class BaseRAGChatBot:
         return result["answer"], result["source_documents"]
 
 
-    def load_emb_db(self, path):
+    def load_emb_db(self, path, model="text-embedding-ada-002"):
 
         logger.debug("run!")
 
-        embeddings = OpenAIEmbeddings()
+        # TODO: FIASS前提なのでChromaDBなども扱えるように拡張
+        embeddings = OpenAIEmbeddings(model=model)
         db = FAISS.load_local(path, embeddings)
         return db
 
@@ -326,17 +387,16 @@ class BaseRAGChatBot:
         logger.debug("run!")
 
         # ベクターストアの保存
+        # TODO: FIASS前提なのでChromaDBなども扱えるように拡張
         db.save_local(str(path))
 
 
 
-    def predict_chatmodel_message(self, system_template, human_template, prompt_params, model="gpt-3.5-turbo"):
+    def predict_chatmodel_message(self, system_template, human_template, prompt_params, model="gpt-3.5-turbo", temperature=0):
 
         logger.debug("run!")
 
-        # TODO: temperatureを可変にする
-        # NOTE: だが応答速度はtempertureが低いほど早いので、基本0で良いかと。
-        chat = ChatOpenAI(model_name=model, temperature=0)
+        chat = ChatOpenAI(model_name=model, temperature=temperature)
         # create message
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
         human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
@@ -348,11 +408,11 @@ class BaseRAGChatBot:
         return chat.predict_messages(messages)
 
 
-    def predict_llm(self, prompt_template, prompt_params):
+    def predict_llm(self, prompt_template, prompt_params, model="text-davinci-003"):
 
         logger.debug("run!")
 
-        llm = OpenAI(model_name="text-davinci-003")
+        llm = OpenAI(model_name=model)
         prompt = PromptTemplate.from_template(prompt_template)
 
         # It can be written using LLMChain
@@ -367,7 +427,7 @@ class BaseRAGChatBot:
         assert len(df_boss_talks) > 0, "上司の名前が間違っている可能性が高いです！\n'user_name_master.json'に記載の名前にしてください。"
 
         # remove quoted passages from the conversation
-        # TODO: なんかちゃんとできていないぽい
+        # TODO: ちゃんとできているか要確認
         df_boss_talks["text"] = df_boss_talks["text"].map(lambda x: re.sub(r"&gt;(.*?)\n", r"\n", x) if x==x else np.nan)
 
         # 行をシャッフル
@@ -379,7 +439,7 @@ class BaseRAGChatBot:
         str_boss_talk = "".join(na_boss_talk)
 
         # decrease the length to fit within the token limit
-        # TODO: トークン数をちゃんと測る。
+        # TODO: トークン数をちゃんと測って実装したほうがギリギリまで詰め込めるのでそうしたい。
         str_boss_talk = str_boss_talk[-1500:]
 
         return str_boss_talk
@@ -427,7 +487,6 @@ class BaseRAGChatBot:
         }
         prompt_params["input"] = input
         system_template = ""
-        # res_translate = self.predict_llm(translate_prompt_template, prompt_params)
         res_translate = self.predict_chatmodel_message(
             system_template, translate_prompt_template, prompt_params, model
         )

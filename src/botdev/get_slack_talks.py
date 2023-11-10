@@ -1,3 +1,4 @@
+import time
 import requests
 import json
 
@@ -68,6 +69,9 @@ class SlackTalkGetter():
 
         logger.debug("run!")
 
+        # RateLimit Erroe対策
+        time.sleep(1.2)
+
         TOKEN_GET_MESSAGES_APP = os.environ["TOKEN_GET_MESSAGES_APP"]
         SLACK_URL_HISTORY = os.environ["SLACK_URL_HISTORY"]
 
@@ -91,6 +95,9 @@ class SlackTalkGetter():
 
         while(next_cursor != None):
             logger.debug(f"next_cursor: {next_cursor}")
+
+            # RateLimit Erroe対策
+            time.sleep(1.2)
 
             payload["cursor"] = next_cursor
             response = requests.get(
@@ -140,6 +147,9 @@ class SlackTalkGetter():
 
         # logger.debug(f"run!  ts: {ts}")
 
+        # RateLimit Erroe対策
+        time.sleep(1.2)
+
         json_data_all = {}
 
         TOKEN_GET_MESSAGES_APP = os.environ["TOKEN_GET_MESSAGES_APP"]
@@ -167,6 +177,9 @@ class SlackTalkGetter():
 
         while(next_cursor != None):
             logger.debug(f"next_cursor: {next_cursor}")
+
+            # RateLimit Erroe対策
+            time.sleep(1.2)
 
             payload["cursor"] = next_cursor
             response = requests.get(
@@ -207,12 +220,15 @@ class SlackTalkGetter():
         # with open(file_path, "r", encoding='utf-8') as json_log:
         #     data = json.load(json_log)
 
-        # いったん握りつぶす
-        # TODO: 要修正
-        if "messages" in list(json_data.keys()):
-            df_json = pd.json_normalize(json_data["messages"], sep="_")
-        else:
-            df_json = pd.DataFrame(columns=['user', 'text', 'ts_reply'])
+        # RateLimit errorの検知
+        if "messages" not in list(json_data.keys()):
+            raise "slack APIからのデータ取得に失敗しました"
+
+        df_json = pd.json_normalize(json_data["messages"], sep="_")
+
+        # メッセージが入っていない場合は空のdfを返す
+        if len(df_json) == 0:
+            df_json = pd.DataFrame(columns=['user', 'text', 'ts', 'ts_reply', 'reply_count'])
 
         return df_json
 
@@ -227,10 +243,13 @@ class SlackTalkGetter():
             list: 返信があるメッセージのタイムスタンプのリスト
         """
 
-        df_out = df_history[["ts", "reply_count"]]
-        df_out = df_out.query("reply_count > 0").reset_index(drop=True)
-
-        list_out = df_out["ts"].to_list()
+        if "reply_count" in list(df_history.columns):
+            df_out = df_history[["ts", "reply_count"]]
+            df_out = df_out.query("reply_count > 0").reset_index(drop=True)
+            list_out = df_out["ts"].to_list()
+        # NOTE: 誰かがチャンネルに参加したのみ等のチャンネルはmessageやtsはあるがreply_countが無いケースあり。
+        else:
+            list_out = []
 
         # 重複削除
         if len(set(list_out)) != len(list_out):
@@ -376,16 +395,16 @@ def get_all_slackid_talks(slack_settings: SlackSettings, dict_user_master: dict)
 
     list_df_out_cols = ["slack_channel_id", "user", "text", "ts_datetime", "ts_reply_datetime"]
 
-    # 会話履歴を取得する最も過去の時間を設定
+    # 全件更新のための処理
     current_time = datetime.now()
     oldest_datetime = current_time - timedelta(days=int(slack_settings.days_from_now))
     oldest_unix_time = oldest_datetime.timestamp()
-
+    # NOTE: 全件更新のときはchannelもrepliesも同じ時刻から取得する
+    oldest_unix_time_for_channel = oldest_unix_time
+    oldest_unix_time_for_replies = oldest_unix_time
 
     df_out = pd.DataFrame(columns=list_df_out_cols)
-
     list_slack_channel_id = slack_settings.slack_channel_id_list
-
     logger.debug(f"list_slack_channel_id: {list_slack_channel_id}")
 
     assert len(list_slack_channel_id) == len(set(list_slack_channel_id)), \
@@ -393,13 +412,24 @@ def get_all_slackid_talks(slack_settings: SlackSettings, dict_user_master: dict)
 
     for slack_channel_id in list_slack_channel_id:
 
+        # 差分更新のための処理
+        if slack_settings.dict_previous_latest_datetime is not None:
+            oldest_datetime = slack_settings.dict_previous_latest_datetime[slack_channel_id]
+            # NOTE: 差分更新のときはchannelはrepliesより２週間遡って取得する。
+            #       これは、過去のチャンネル投稿に新しい時刻のreplyがされることがあるため。
+            oldest_unix_time_for_channel = (oldest_datetime - timedelta(days=14)).timestamp()
+            oldest_unix_time_for_replies = oldest_datetime.timestamp()
+
         st_getter = SlackTalkGetter(slack_channel_id)
 
-        json_history = st_getter.get_channels(slack_settings.history_json_file_name, oldest_unix_time)
+        json_history = st_getter.get_channels(
+            slack_settings.history_json_file_name, oldest_unix_time_for_channel
+        )
         df_history = st_getter.convert_json_to_df(json_history)
+
         list_replies_ts = st_getter.get_replies_ts_list(df_history)
         df_hist_and_reps = st_getter.merge_hist_and_reps(
-            slack_settings, df_history, list_replies_ts, oldest_unix_time
+            slack_settings, df_history, list_replies_ts, oldest_unix_time_for_replies
         )
         # ユーザーIDをユーザー名にする
         df_hist_and_reps[["user", "text"]] = st_getter.replace_user_id2name(dict_user_master, df_hist_and_reps)
