@@ -8,7 +8,6 @@ provider:
   name: aws
   # 利用可能なバージョンは https://docs.aws.amazon.com/lambda/latest/dg/lambda-python.html を確認してください
   runtime: python3.11
-  # リージョンは普段使うものに変更
   region: ap-northeast-1
   # the default value is 6 sec!!
   timeout: 900
@@ -23,10 +22,8 @@ provider:
             - "s3:PutObject"
             - "s3:DeleteObject"
           Resource: "*"
-        # 他にも必要なものがあれば追記してください
   environment:
     SERVERLESS_STAGE: ${opt:stage, 'prod'}
-    # デプロイを実行する前に export しておいてください
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
     SETTINGS_FILE_PATH: ${env:SETTINGS_FILE_PATH}
     TOKEN_GET_MESSAGES_APP: ${env:TOKEN_GET_MESSAGES_APP}
