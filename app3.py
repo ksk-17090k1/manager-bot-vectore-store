@@ -22,17 +22,13 @@ sys.path.append('/opt')
 import src.botdev.langchain_utils as langchain_utils
 import src.botdev.get_slack_talks as get_slack_talks
 import src.botdev.mbbot_settings as mbbot_settings
-import src.botdev.langchain_utils as langchain_utils
+import src.botdev.log_setting_utils as log_setting_utils
 import src.botdev.aws_utils as aws_utils
 import boto3
 import pandas as pd
 import json
 
 
-
-
-# 動作確認用にデバッグレベルのロギングを有効にします
-logging.basicConfig(level=logging.DEBUG)
 
 
 def main():
@@ -77,7 +73,7 @@ def main():
     client = WebClient(token=os.environ.get("TOKEN_GET_MESSAGES_APP"))
     path = ""
     dict_channel_master_list = get_slack_talks.get_channel_master_list(client, path)
-    logging.debug(f"dict_channel_master_list: {dict_channel_master_list}")
+    logger.debug(f"dict_channel_master_list: {dict_channel_master_list}")
     # 保存
     bucket_prefix = "shared/"
     file_name = Path(settings.get_conf_val("io.settings", "path_channel_name_master")).name
@@ -123,7 +119,7 @@ def main():
 
         dict_previous_latest_datetime[id] = previous_latest_datetime
 
-    logging.debug(f"dict_previous_latest_datetime: {dict_previous_latest_datetime}")
+    logger.debug(f"dict_previous_latest_datetime: {dict_previous_latest_datetime}")
 
     # 全件更新
     # slack_settings.dict_previous_latest_datetime = None
@@ -137,11 +133,11 @@ def main():
     # --- 過去分と直近取得分のマージ ---
     # NOTE: ts_reply_datetimeがNaNかつ、ts_datetimeがprevious_latest_datetimeより古いレコードが消すべきレコード。ド・モルガンの法則。
     df_talks = df_talks.query("(ts_reply_datetime == ts_reply_datetime) | (ts_datetime >= @previous_latest_datetime)")
-    logging.debug(f"len(df_talks: new): {len(df_talks)}")
-    logging.debug(f"len(df_talks_old): {len(df_talks_old)}")
+    logger.debug(f"len(df_talks: new): {len(df_talks)}")
+    logger.debug(f"len(df_talks_old): {len(df_talks_old)}")
     df_talks = pd.concat([df_talks_old, df_talks])
-    logging.debug(f"concat!!!")
-    logging.debug(f"len(df_talks): {len(df_talks)}")
+    logger.debug(f"concat!!!")
+    logger.debug(f"len(df_talks): {len(df_talks)}")
 
     # sort again
     df_talks["is_history"] = df_talks["ts_reply_datetime"].map(lambda x: 1 if x!=x else 0)
@@ -153,20 +149,20 @@ def main():
 
     # 上司BOT関連の会話はノイズとなるので除外する
     str_bot_identifier = settings.get_conf_val("langchain", "str_bot_identifier")
-    logging.debug(f"len(df_talks): {len(df_talks)}")
+    logger.debug(f"len(df_talks): {len(df_talks)}")
     df_talks = df_talks[~df_talks['user'].str.contains(str_bot_identifier)].reset_index(drop=True)
     df_talks = df_talks[~df_talks['text'].str.contains(str_bot_identifier, na=False)].reset_index(drop=True)
-    logging.debug(f"上司BOT関連の会話レコードを削除！")
-    logging.debug(f"len(df_talks): {len(df_talks)}")
+    logger.debug(f"上司BOT関連の会話レコードを削除！")
+    logger.debug(f"len(df_talks): {len(df_talks)}")
 
 
     # 重複レコード削除
-    logging.debug(f"len(df_talks): {len(df_talks)}")
+    logger.debug(f"len(df_talks): {len(df_talks)}")
     df_talks = df_talks.drop_duplicates(
         subset=["slack_channel_id", "ts_datetime", "text", "ts_reply_datetime"]
     ).reset_index(drop=True)
-    logging.debug(f"重複レコード削除")
-    logging.debug(f"len(df_talks): {len(df_talks)}")
+    logger.debug(f"重複レコード削除")
+    logger.debug(f"len(df_talks): {len(df_talks)}")
 
 
 
@@ -190,16 +186,16 @@ def main():
         df_monthly_talks = df_talks.copy()
 
         # df_talksのts_reply_datetimeがNaNでts_datetimeの月がmonthと一致するか、ts_reply_datetimeの月がmonthと一致するかで抽出する処理
-        logging.debug(f"len(df_monthly_talks): {len(df_monthly_talks)}")
+        logger.debug(f"len(df_monthly_talks): {len(df_monthly_talks)}")
         df_monthly_talks = df_monthly_talks.query(
             "((ts_reply_datetime != ts_reply_datetime) & (ts_datetime.dt.month == @month)) \
              | ((ts_reply_datetime == ts_reply_datetime) & (ts_reply_datetime.dt.month == @month))"
         ).reset_index(drop=True)
-        logging.debug(f"{month}月のdfに絞り込み！")
-        logging.debug(f"len(df_monthly_talks): {len(df_monthly_talks)}")
+        logger.debug(f"{month}月のdfに絞り込み！")
+        logger.debug(f"len(df_monthly_talks): {len(df_monthly_talks)}")
 
         list_channels = df_monthly_talks["slack_channel_id"].unique().tolist()
-        logging.debug(f"list_channels: {list_channels}")
+        logger.debug(f"list_channels: {list_channels}")
         docs = []
         len_all_str_docs = 0
 
@@ -287,12 +283,12 @@ def main():
                     path_pkl = os.path.join(tmpdirname, file_name_pkl)
                     file_key_pkl = file_key + file_name_pkl
                     s3.download_file(bucket_name, file_key_pkl, path_pkl)
-                    logging.debug(f"download {path_pkl} from {bucket_name}/{file_key_pkl}")
+                    logger.debug(f"download {path_pkl} from {bucket_name}/{file_key_pkl}")
 
                     path_faiss = os.path.join(tmpdirname, file_name_faiss)
                     file_key_faiss = file_key + file_name_faiss
                     s3.download_file(bucket_name, file_key_faiss, path_faiss)
-                    logging.debug(f"download {path_faiss} from {bucket_name}/{file_key_faiss}")
+                    logger.debug(f"download {path_faiss} from {bucket_name}/{file_key_faiss}")
 
                     # read vector store
                     db = rag_chatbot.load_emb_db(tmpdirname)
@@ -340,8 +336,8 @@ def main():
         logger.debug(f"File '{file_key_faiss}' successfully uploaded to '{bucket_name}'.")
 
 
-    logging.debug(f"len_all_str_docs: {len_all_str_docs}")
-    logging.debug(f"embeddingの超概算コスト: {(1*10**(-7) * len_all_str_docs)}ドル")
+    logger.debug(f"len_all_str_docs: {len_all_str_docs}")
+    logger.debug(f"embeddingの超概算コスト: {(1*10**(-7) * len_all_str_docs)}ドル")
 
 
 
@@ -349,21 +345,25 @@ def main():
 # 開発用
 if __name__ == "__main__":
     load_dotenv(join(dirname(__file__), '.env'))
-    logger = logging.getLogger(__name__)
+    # logger = logging.getLogger(__name__)
+        # ログ設定
+    logger = log_setting_utils.conf_logger(logging.DEBUG)
+
     main()
 
 
 # これより以降は AWS Lambda 環境で実行したときのみ実行
 
 # ロギングを AWS Lambda 向けに初期化
-logging.basicConfig(format="%(funcName)s %(asctime)s %(message)s", level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(format="%(funcName)s %(asctime)s %(message)s", level=logger.debug)
+# logger = logging.getLogger(__name__)
+logger = log_setting_utils.conf_logger(logging.DEBUG)
 
 
 
 # AWS Lambda 環境で実行される関数
 def handler(event, context):
     # デバッグ用にリクエスト内容をログに出力
-    logging.debug(f"event: \n{event}")
+    logger.debug(f"event: \n{event}")
     main()
     return {}
