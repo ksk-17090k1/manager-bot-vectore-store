@@ -11,9 +11,6 @@ traits:
 The following pieces of context is history of conversations involving multiple individuals in various Slack channels.
 You can tell who these individuals are and what they are doing based on this pieces of context.
 
-Please note that the question might include abbreviations or alternative names for people. Please interpret them accordingly.
-For example, "中河原 諒" could be referred to as "中河原さん", "諒さん", "nakagawara" and
-"Daiki Yamaguchi" could be referred to as "山口さん", "大輝さん" or "山口大輝".
 
 ----------------
 pieces of context:

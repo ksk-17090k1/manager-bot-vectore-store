@@ -2,29 +2,29 @@
 
 - prompt/
   - プロンプトのテキストファイルが格納されているディレクトリです。
-  - プロンプトは後述のデプロイ手順のところでS3に格納します。
+  - プロンプトは後述のデプロイ手順のところで S3 に格納します。
 - src/
-  - 上司BOT用に作成した自作モジュール群です
-  - リポジトリ`myboss-bot-lambda-nakagawara`の`src/`と同じです
+  - 上司 BOT 用に作成した自作モジュール群です
+  - リポジトリ`myboss-bot-lambda-<boss name>`の`src/`と同じです
 - app3.py
-  - Slackのトーク履歴の収集、embeddingによるベクターストアの作成を行うスクリプトです。
-  - Slackのトーク履歴の収集は、Slack APIを利用しています。
-    - 毎回全件取得すると時間がかかる＆APIのRateLimitに引っかかるため、差分更新できるようにしています。
-    - トーク履歴の収集対象となるチャンネルは、下記で作成するslackアプリ「manager-bot-talk-collection-app」がメンバーとして参加しているチャンネルに限ります。
-  - embeddingによるベクターストアの作成は、OpenAIのAPIを利用しています。
-    - こちらも毎回全件をembeddingすると費用がかかる＆APIのRateLimitに引っかかるため、差分更新できるようにしています。
-  - ローカル環境 or lambdaでの実行を想定しています
+  - Slack のトーク履歴の収集、embedding によるベクターストアの作成を行うスクリプトです。
+  - Slack のトーク履歴の収集は、Slack API を利用しています。
+    - 毎回全件取得すると時間がかかる＆API の RateLimit に引っかかるため、差分更新できるようにしています。
+    - トーク履歴の収集対象となるチャンネルは、下記で作成する slack アプリ「manager-bot-talk-collection-app」がメンバーとして参加しているチャンネルに限ります。
+  - embedding によるベクターストアの作成は、OpenAI の API を利用しています。
+    - こちらも毎回全件を embedding すると費用がかかる＆API の RateLimit に引っかかるため、差分更新できるようにしています。
+  - ローカル環境 or lambda での実行を想定しています
 - serverless.yml
-  - Serverless Frameworkを使ってスクリプトをlambdaにデプロイするための設定ファイルです。
+  - Serverless Framework を使ってスクリプトを lambda にデプロイするための設定ファイルです。
   - `app3.py`の実行は日次に設定しています。
 - package.json, package-lock.json
-  - Node.jsのパッケージのインストール用のファイルです
+  - Node.js のパッケージのインストール用のファイルです
 - requirements.txt
-  - pythonのパッケージのインストール用のファイルです
+  - python のパッケージのインストール用のファイルです
 - settings_conf.ini
-  - 上司Botの設定ファイルです
-- .env (git対象外)
-  - OpenAIのAPIキーやSlackのSigning Secretなどの秘密情報を記載するファイルです
+  - 上司 Bot の設定ファイルです
+- .env (git 対象外)
+  - OpenAI の API キーや Slack の Signing Secret などの秘密情報を記載するファイルです
 
 <br/>
 <br/>
@@ -35,11 +35,11 @@
 - python3.11
   - バージョンが異なるとエラーとなる恐れがあるのでご注意ください。
 - Serverless Framework
-  - AWS Lambdaへのデプロイを行うために利用しています
-- Node.js (v12以上)
-  - Serverless FrameworkがNode.jsで提供されているためインストールが必要です
+  - AWS Lambda へのデプロイを行うために利用しています
+- Node.js (v12 以上)
+  - Serverless Framework が Node.js で提供されているためインストールが必要です
 - Docker Desktop
-  - Serverless FrameworkがDockerを利用しているためインストールが必要です
+  - Serverless Framework が Docker を利用しているためインストールが必要です
 - AWS CLI
 - AWS Lambda
 - AWS S3
@@ -50,15 +50,14 @@
 
 # デプロイ方法
 
-※ python3.11, Node.js, Serverless Framework, Docker Desktop, AWS CLIがインストールされていることを前提とします。
+※ python3.11, Node.js, Serverless Framework, Docker Desktop, AWS CLI がインストールされていることを前提とします。
 
 <br/>
 <br/>
 
+## S3 バケットの準備
 
-## S3バケットの準備
-
-1. AWS CLIで`aws s3 mb s3://manager-bot-data --region ap-northeast-1`を実行し、バケットを作成します
+1. AWS CLI で`aws s3 mb s3://manager-bot-data --region ap-northeast-1`を実行し、バケットを作成します
 2. `s3://manager-bot-data/prompt/`というディレクトリを作成します
 3. `s3://manager-bot-data/prompt/`配下に以下４ファイルを格納します。
    1. `mbbot_talk_features_prompt.txt`
@@ -71,13 +70,13 @@
 <br/>
 <br/>
 
-
-## slackアプリの作成
+## slack アプリの作成
 
 1. [Slack API: Applications | Slack](https://api.slack.com/apps)へアクセスし、「Create New App」をクリックします。
 2. 「From an app manifest」をクリックします。
 3. ワークスペース（Remain in）を選択し、「Next」をクリックします。
-4. 以下のYAMLを貼り付け、「Next」をクリックします。
+4. 以下の YAML を貼り付け、「Next」をクリックします。
+
    1. ```
       display_information:
       name: manager-bot-talk-collection-app
@@ -104,20 +103,22 @@
       socket_mode_enabled: false
       token_rotation_enabled: false
       ```
+
 5. 「Create」をクリックします
 6. 左側の「Basic Information」-> 「Install your app」に進み、「Install to Workspace」をクリックします
 7. 「許可する」をクリックします
-9. 左側の「OAuth & Permissions」-> 「OAuth Tokens for Your Workspace」に進み、「Bot User OAuth Token」をメモしておきます。
+8. 左側の「OAuth & Permissions」-> 「OAuth Tokens for Your Workspace」に進み、「Bot User OAuth Token」をメモしておきます。
 
 <br/>
 <br/>
 <br/>
 
-## lambdaへのデプロイ
+## lambda へのデプロイ
 
 1. このリポジトリをクローンします
 2. 以下のような`.env`ファイルを作成します。
-(`TOKEN_GET_MESSAGES_APP`は上記でメモした「Bot User OAuth Token」の値としてください)
+   (`TOKEN_GET_MESSAGES_APP`は上記でメモした「Bot User OAuth Token」の値としてください)
+
    1. ```
       OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
       SLACK_URL_HISTORY = "https://slack.com/api/conversations.history"
@@ -125,25 +126,21 @@
       TOKEN_GET_MESSAGES_APP = "xoxb-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       SETTINGS_FILE_PATH = "./settings_conf.ini"
       ```
-1. `npm ci`を実行します
-2. `pip install -r requirements.txt`を実行します
-3. lambdaのlayerの作成準備のため、`xcopy .\src .\layers\src /s /e`を実行します。（コマンドプロンプトの場合）
-4. `sls deploy`を実行します
-5. AWS Lambdaにデプロイされたことを確認し、ログに表示されるAPI GatewayのURLをメモしておきます
-6. [Slack API: Applications | Slack](https://api.slack.com/apps)から上記で作成したアプリの編集画面へ進み、左側の「App Manifest」をクリックし、YAML内の「request_url」にメモしたAPI GatewayのURLを貼り付けます。
-7. slackでbotにメッセージを送信すると応答があるはずです。
 
+3. `npm ci`を実行します
+4. `pip install -r requirements.txt`を実行します
+5. lambda の layer の作成準備のため、`xcopy .\src .\layers\src /s /e`を実行します。（コマンドプロンプトの場合）
+6. `sls deploy`を実行します
+7. AWS Lambda にデプロイされたことを確認し、ログに表示される API Gateway の URL をメモしておきます
+8. [Slack API: Applications | Slack](https://api.slack.com/apps)から上記で作成したアプリの編集画面へ進み、左側の「App Manifest」をクリックし、YAML 内の「request_url」にメモした API Gateway の URL を貼り付けます。
+9. slack で bot にメッセージを送信すると応答があるはずです。
 
 <br/>
 <br/>
 <br/>
-
-
 
 # ローカルでの実行方法
 
-
-## app3.pyの実行
+## app3.py の実行
 
 1. `python app3.py`を実行してください
-
