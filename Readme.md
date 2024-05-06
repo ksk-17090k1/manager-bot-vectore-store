@@ -74,7 +74,7 @@
 
 1. [Slack API: Applications | Slack](https://api.slack.com/apps)へアクセスし、「Create New App」をクリックします。
 2. 「From an app manifest」をクリックします。
-3. ワークスペース（Remain in）を選択し、「Next」をクリックします。
+3. ワークスペースを選択し、「Next」をクリックします。
 4. 以下の YAML を貼り付け、「Next」をクリックします。
 
    1. ```
